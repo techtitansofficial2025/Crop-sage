@@ -1,5 +1,8 @@
-# backend/main.py
-import os, pickle, numpy as np, tensorflow as tf
+# top of backend/main.py — MUST come before importing tensorflow
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = ""   # force CPU-only; prevents TF from trying to init CUDA
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # optional: reduce TF logs
+import pickle, numpy as np, tensorflow as tf
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware

@@ -7,6 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import { useLanguage } from "@/contexts/LanguageContext";
+import LanguageSelector from "@/components/LanguageSelector";
 import { Loader2, Leaf, Droplets, Calendar, TrendingUp, MapPin, Thermometer, Gauge } from "lucide-react";
 import heroImage from "@/assets/agricultural-hero.jpg";
 
@@ -31,6 +33,7 @@ interface CropRecommendation {
 
 const Index = () => {
   const { toast } = useToast();
+  const { t } = useLanguage();
   const [isLoading, setIsLoading] = useState(false);
   const [recommendations, setRecommendations] = useState<CropRecommendation[]>([]);
   const [formData, setFormData] = useState<FormData>({
@@ -49,18 +52,18 @@ const Index = () => {
   ];
 
   const months = [
-    { value: '1', label: 'January' },
-    { value: '2', label: 'February' },
-    { value: '3', label: 'March' },
-    { value: '4', label: 'April' },
-    { value: '5', label: 'May' },
-    { value: '6', label: 'June' },
-    { value: '7', label: 'July' },
-    { value: '8', label: 'August' },
-    { value: '9', label: 'September' },
-    { value: '10', label: 'October' },
-    { value: '11', label: 'November' },
-    { value: '12', label: 'December' }
+    { value: '1', key: 'january' },
+    { value: '2', key: 'february' },
+    { value: '3', key: 'march' },
+    { value: '4', key: 'april' },
+    { value: '5', key: 'may' },
+    { value: '6', key: 'june' },
+    { value: '7', key: 'july' },
+    { value: '8', key: 'august' },
+    { value: '9', key: 'september' },
+    { value: '10', key: 'october' },
+    { value: '11', key: 'november' },
+    { value: '12', key: 'december' }
   ];
 
   const handleInputChange = (field: keyof FormData, value: string) => {
@@ -119,8 +122,8 @@ const Index = () => {
     
     if (emptyFields.length > 0) {
       toast({
-        title: "Missing Information",
-        description: "Please fill in all fields to get accurate recommendations.",
+        title: t('missingInfo'),
+        description: t('fillAllFields'),
         variant: "destructive"
       });
       return;
@@ -136,13 +139,13 @@ const Index = () => {
       setRecommendations(results);
       
       toast({
-        title: "Recommendations Generated",
-        description: `Found ${results.length} suitable crops for your conditions.`
+        title: t('recommendationsGenerated'),
+        description: t('foundCrops').replace('{count}', results.length.toString())
       });
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to generate recommendations. Please try again.",
+        title: t('error'),
+        description: t('failedToGenerate'),
         variant: "destructive"
       });
     } finally {
@@ -152,6 +155,11 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Language Selector - Fixed Position */}
+      <div className="fixed top-4 right-4 z-50">
+        <LanguageSelector />
+      </div>
+
       {/* Hero Section */}
       <section className="relative h-[60vh] flex items-center justify-center overflow-hidden">
         <div 
@@ -161,23 +169,23 @@ const Index = () => {
         <div className="absolute inset-0 bg-gradient-primary opacity-75" />
         <div className="relative z-10 text-center px-4 max-w-4xl mx-auto">
           <h1 className="text-5xl md:text-6xl font-bold text-primary-foreground mb-4">
-            Smart Crop Recommendations
+            {t('title')}
           </h1>
           <p className="text-xl md:text-2xl text-primary-foreground/90 mb-8">
-            AI-powered agricultural insights for optimal crop selection based on your soil and climate conditions
+            {t('subtitle')}
           </p>
           <div className="flex flex-wrap justify-center gap-4 text-primary-foreground/80">
             <div className="flex items-center gap-2">
               <Leaf className="w-5 h-5" />
-              <span>Soil Analysis</span>
+              <span>{t('soilAnalysis')}</span>
             </div>
             <div className="flex items-center gap-2">
               <Thermometer className="w-5 h-5" />
-              <span>Climate Optimization</span>
+              <span>{t('climateOptimization')}</span>
             </div>
             <div className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5" />
-              <span>Yield Prediction</span>
+              <span>{t('yieldPrediction')}</span>
             </div>
           </div>
         </div>
@@ -191,10 +199,10 @@ const Index = () => {
             <CardHeader className="bg-gradient-secondary">
               <CardTitle className="flex items-center gap-2">
                 <MapPin className="w-5 h-5 text-primary" />
-                Field Conditions
+                {t('fieldConditions')}
               </CardTitle>
               <CardDescription>
-                Enter your soil and environmental conditions for personalized crop recommendations
+                {t('fieldConditionsDesc')}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-6">
@@ -203,15 +211,15 @@ const Index = () => {
                 <div className="space-y-4">
                   <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
                     <Leaf className="w-4 h-4 text-primary" />
-                    Soil Properties
+                    {t('soilProperties')}
                   </h3>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="soil">Soil Type</Label>
+                      <Label htmlFor="soil">{t('soilType')}</Label>
                       <Select value={formData.soil} onValueChange={(value) => handleInputChange('soil', value)}>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select soil type" />
+                          <SelectValue placeholder={t('selectSoilType')} />
                         </SelectTrigger>
                         <SelectContent>
                           {soilTypes.map(soil => (
@@ -222,7 +230,7 @@ const Index = () => {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="soilPh">Soil pH</Label>
+                      <Label htmlFor="soilPh">{t('soilPh')}</Label>
                       <Input
                         id="soilPh"
                         type="number"
@@ -243,26 +251,28 @@ const Index = () => {
                 <div className="space-y-4">
                   <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
                     <Thermometer className="w-4 h-4 text-primary" />
-                    Climate Conditions
+                    {t('climateConditions')}
                   </h3>
                   
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="sown">Sowing Month</Label>
+                      <Label htmlFor="sown">{t('sowingMonth')}</Label>
                       <Select value={formData.sown} onValueChange={(value) => handleInputChange('sown', value)}>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select month" />
+                          <SelectValue placeholder={t('selectMonth')} />
                         </SelectTrigger>
                         <SelectContent>
                           {months.map(month => (
-                            <SelectItem key={month.value} value={month.value}>{month.label}</SelectItem>
+                            <SelectItem key={month.value} value={month.value}>
+                              {t(month.key)}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="temperature">Temperature (°C)</Label>
+                      <Label htmlFor="temperature">{t('temperature')}</Label>
                       <Input
                         id="temperature"
                         type="number"
@@ -275,7 +285,7 @@ const Index = () => {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="humidity">Humidity (%)</Label>
+                      <Label htmlFor="humidity">{t('humidity')}</Label>
                       <Input
                         id="humidity"
                         type="number"
@@ -295,12 +305,12 @@ const Index = () => {
                 <div className="space-y-4">
                   <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
                     <Gauge className="w-4 h-4 text-primary" />
-                    Soil Nutrients (NPK)
+                    {t('soilNutrients')}
                   </h3>
                   
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="nitrogen">Nitrogen (N)</Label>
+                      <Label htmlFor="nitrogen">{t('nitrogen')}</Label>
                       <Input
                         id="nitrogen"
                         type="number"
@@ -312,7 +322,7 @@ const Index = () => {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="phosphorus">Phosphorus (P)</Label>
+                      <Label htmlFor="phosphorus">{t('phosphorus')}</Label>
                       <Input
                         id="phosphorus"
                         type="number"
@@ -324,7 +334,7 @@ const Index = () => {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="potassium">Potassium (K)</Label>
+                      <Label htmlFor="potassium">{t('potassium')}</Label>
                       <Input
                         id="potassium"
                         type="number"
@@ -345,12 +355,12 @@ const Index = () => {
                   {isLoading ? (
                     <>
                       <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                      Analyzing Conditions...
+                      {t('analyzingConditions')}
                     </>
                   ) : (
                     <>
                       <Leaf className="w-5 h-5 mr-2" />
-                      Get Crop Recommendations
+                      {t('getRecommendations')}
                     </>
                   )}
                 </Button>
@@ -363,10 +373,10 @@ const Index = () => {
             <CardHeader className="bg-gradient-secondary">
               <CardTitle className="flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-primary" />
-                Crop Recommendations
+                {t('cropRecommendations')}
               </CardTitle>
               <CardDescription>
-                AI-powered suggestions based on your specific conditions
+                {t('cropRecommendationsDesc')}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-6">
@@ -374,7 +384,7 @@ const Index = () => {
                 <div className="text-center py-12">
                   <Leaf className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
                   <p className="text-muted-foreground">
-                    Enter your field conditions to receive personalized crop recommendations
+                    {t('enterConditions')}
                   </p>
                 </div>
               ) : (
@@ -394,20 +404,20 @@ const Index = () => {
                       <div className="grid grid-cols-2 gap-4 text-sm">
                         <div className="flex items-center gap-2">
                           <Droplets className="w-4 h-4 text-primary" />
-                          <span className="text-muted-foreground">Water Source:</span>
-                          <span className="font-medium">{crop.WATER_SOURCE || 'Variable'}</span>
+                          <span className="text-muted-foreground">{t('waterSource')}:</span>
+                          <span className="font-medium">{crop.WATER_SOURCE || t('variable')}</span>
                         </div>
                         
                         <div className="flex items-center gap-2">
                           <Calendar className="w-4 h-4 text-primary" />
-                          <span className="text-muted-foreground">Duration:</span>
-                          <span className="font-medium">{crop.CROPDURATION} days</span>
+                          <span className="text-muted-foreground">{t('duration')}:</span>
+                          <span className="font-medium">{crop.CROPDURATION} {t('days')}</span>
                         </div>
                       </div>
                       
                       <div className="mt-2 flex items-center gap-2 text-sm">
                         <Droplets className="w-4 h-4 text-primary" />
-                        <span className="text-muted-foreground">Water Required:</span>
+                        <span className="text-muted-foreground">{t('waterRequired')}:</span>
                         <span className="font-medium">{crop.WATERREQUIRED}mm</span>
                       </div>
                     </div>
@@ -424,10 +434,10 @@ const Index = () => {
         <div className="max-w-6xl mx-auto px-4">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold text-foreground mb-4">
-              Powered by Advanced AI Technology
+              {t('featuresTitle')}
             </h2>
             <p className="text-muted-foreground text-lg">
-              Our machine learning model analyzes multiple factors to provide accurate crop recommendations
+              {t('featuresDesc')}
             </p>
           </div>
           
@@ -436,9 +446,9 @@ const Index = () => {
               <div className="w-16 h-16 bg-gradient-primary rounded-full flex items-center justify-center mx-auto mb-4">
                 <Leaf className="w-8 h-8 text-primary-foreground" />
               </div>
-              <h3 className="text-xl font-semibold mb-2">Soil Analysis</h3>
+              <h3 className="text-xl font-semibold mb-2">{t('soilAnalysis')}</h3>
               <p className="text-muted-foreground">
-                Comprehensive soil type and nutrient analysis for optimal crop selection
+                {t('soilAnalysisDesc')}
               </p>
             </div>
             
@@ -446,9 +456,9 @@ const Index = () => {
               <div className="w-16 h-16 bg-gradient-primary rounded-full flex items-center justify-center mx-auto mb-4">
                 <Thermometer className="w-8 h-8 text-primary-foreground" />
               </div>
-              <h3 className="text-xl font-semibold mb-2">Climate Optimization</h3>
+              <h3 className="text-xl font-semibold mb-2">{t('climateOptimization')}</h3>
               <p className="text-muted-foreground">
-                Weather pattern analysis to match crops with ideal growing conditions
+                {t('climateOptimizationDesc')}
               </p>
             </div>
             
@@ -456,9 +466,9 @@ const Index = () => {
               <div className="w-16 h-16 bg-gradient-primary rounded-full flex items-center justify-center mx-auto mb-4">
                 <TrendingUp className="w-8 h-8 text-primary-foreground" />
               </div>
-              <h3 className="text-xl font-semibold mb-2">Yield Prediction</h3>
+              <h3 className="text-xl font-semibold mb-2">{t('yieldPrediction')}</h3>
               <p className="text-muted-foreground">
-                Predictive analytics for crop duration and water requirements
+                {t('yieldPredictionDesc')}
               </p>
             </div>
           </div>

@@ -70,6 +70,14 @@ export default {
       transitionTimingFunction: {
         'smooth': 'var(--transition-smooth)',
       },
+      fontFamily: {
+        'inter': ['Inter', 'sans-serif'],
+        'hindi': ['Noto Sans Devanagari', 'sans-serif'],
+        'bengali': ['Noto Sans Bengali', 'sans-serif'],
+        'tamil': ['Noto Sans Tamil', 'sans-serif'],
+        'telugu': ['Noto Sans Telugu', 'sans-serif'],  
+        'gujarati': ['Noto Sans Gujarati', 'sans-serif'],
+      },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",

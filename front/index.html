@@ -1,26 +1,317 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>किसान मित्र - Crop Predictor | कृषि सलाहकार</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        /* (same CSS as your original - omitted here for brevity in this block) */
-        /* paste your full CSS from your previous HTML here if desired */
-        /* For brevity I'm keeping your original CSS — use the CSS block you already have. */
-        /* ... */
-        /* To keep this response focused, I'm assuming you'll reuse your exact CSS above. */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: white;
+            position: relative;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .language-toggle {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 25px;
+            padding: 10px 20px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .language-toggle:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .main-card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0;
+            min-height: 600px;
+        }
+
+        .input-section {
+            padding: 40px;
+            background: linear-gradient(145deg, #f8f9ff, #e8ecff);
+            border-right: 1px solid #e0e0e0;
+        }
+
+        .output-section {
+            padding: 40px;
+            background: linear-gradient(145deg, #fff8f0, #f0f8ff);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+            font-size: 1.1rem;
+        }
+
+        .bilingual {
+            color: #666;
+            font-size: 0.9rem;
+            font-weight: normal;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            background: white;
+        }
+
+        .form-control:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            outline: none;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .predict-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.2rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .predict-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(255, 107, 107, 0.3);
+        }
+
+        .predict-btn:active {
+            transform: translateY(0);
+        }
+
+        .results-container {
+            text-align: center;
+            width: 100%;
+        }
+
+        .result-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+            border-left: 5px solid #4CAF50;
+            animation: slideIn 0.5s ease;
+        }
+
+        .result-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .result-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #4CAF50;
+            margin-bottom: 5px;
+        }
+
+        .result-subtitle {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .empty-state {
+            opacity: 0.7;
+        }
+
+        .empty-state i {
+            font-size: 4rem;
+            color: #ddd;
+            margin-bottom: 20px;
+        }
+
+        .empty-state p {
+            color: #999;
+            font-size: 1.1rem;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            .main-card {
+                grid-template-columns: 1fr;
+                gap: 0;
+            }
+            
+            .form-row {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .input-section, .output-section {
+                padding: 25px;
+            }
+
+            .language-toggle {
+                position: static;
+                margin-bottom: 20px;
+                display: inline-flex;
+            }
+        }
+
+        .info-tooltip {
+            position: relative;
+            display: inline-block;
+            margin-left: 5px;
+            color: #667eea;
+            cursor: help;
+        }
+
+        .tooltip-text {
+            visibility: hidden;
+            width: 200px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 10px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -100px;
+            font-size: 0.8rem;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .info-tooltip:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Simple notification styles */
+        .notification {
+            display: inline-block;
+        }
     </style>
 </head>
 <body>
-    <!-- Paste your original HTML body here (the full structure you provided) -->
-    <!-- For brevity re-using your full original body markup unchanged -->
-    <!-- BEGIN ORIGINAL BODY (copy entire content from your provided HTML) -->
     <div class="container">
         <div class="header">
-            <div class="language-toggle" id="languageToggle">
-                <i class="fas fa-language"></i>
+            <div class="language-toggle" id="languageToggle" role="button" aria-pressed="false" tabindex="0">
+                <i class="fas fa-language" aria-hidden="true"></i>
                 <span id="langText">हिंदी</span>
             </div>
             <h1><i class="fas fa-seedling"></i> <span id="mainTitle">किसान मित्र - Crop Predictor</span></h1>
@@ -34,11 +325,6 @@
                 </h2>
                 
                 <form id="cropForm">
-                    <!-- (copy all your form controls exactly as before: soil, sown, soil_ph, temp, humidity, nitrogen, phosphorus, potassium) -->
-                    <!-- ... USE YOUR ORIGINAL form HTML (from your message) HERE ... -->
-                    <!-- for brevity, assume entire form markup identical to your provided HTML -->
-                    <!-- Paste the entire form block you provided earlier -->
-                    <!-- START FORM COPY -->
                     <div class="form-group">
                         <label for="soil" id="soilLabel">
                             मिट्टी का प्रकार
@@ -46,8 +332,9 @@
                                 <span class="tooltip-text" id="soilTooltip">अपने खेत की मिट्टी का प्रकार चुनें</span>
                             </i>
                         </label>
-                        <select class="form-control" id="soil" required>
-                            <option value="" id="soilPlaceholder">मिट्टी चुनें</option>
+                        <select class="form-control" id="soil" required aria-required="true">
+                            <option value="" id="soilPlaceholder" disabled selected>मिट्टी चुनें</option>
+                            <!-- Long list kept as fallback; can be replaced by backend options -->
                             <option value="alluvial">जलोढ़ मिट्टी | Alluvial Soil</option>
                             <option value="loamy">दोमट मिट्टी | Loamy Soil</option>
                             <option value="clay">चिकनी मिट्टी | Clay Soil</option>
@@ -87,8 +374,8 @@
                                 <span class="tooltip-text" id="seasonTooltip">आप कब बुवाई करना चाहते हैं?</span>
                             </i>
                         </label>
-                        <select class="form-control" id="sown" required>
-                            <option value="" id="seasonPlaceholder">मौसम चुनें</option>
+                        <select class="form-control" id="sown" required aria-required="true">
+                            <option value="" id="seasonPlaceholder" disabled selected>मौसम चुनें</option>
                             <option value="kharif">खरीफ | Kharif (मानसून)</option>
                             <option value="rabi">रबी | Rabi (सर्दी)</option>
                             <option value="zaid">जायद | Zaid (गर्मी)</option>
@@ -100,7 +387,7 @@
                             मिट्टी का pH
                             <span class="bilingual">(6.0 - 8.5)</span>
                         </label>
-                        <input type="number" class="form-control" id="soil_ph" min="4" max="10" step="0.1" placeholder="7.0" required>
+                        <input type="number" class="form-control" id="soil_ph" min="4" max="10" step="0.1" placeholder="7.0" required aria-required="true">
                     </div>
 
                     <div class="form-row">
@@ -145,60 +432,120 @@
                         <input type="number" class="form-control" id="potassium" min="0" max="250" step="1" placeholder="30" required>
                     </div>
 
-                    <button type="submit" class="predict-btn">
+                    <button type="submit" id="predictBtnEl" class="predict-btn">
                         <i class="fas fa-magic"></i> <span id="predictBtn">फसल की भविष्यवाणी करें</span>
                     </button>
-                    <!-- END FORM COPY -->
                 </form>
             </div>
 
             <div class="output-section">
                 <div id="resultsContainer" class="results-container">
                     <div class="empty-state">
-                        <i class="fas fa-seedling"></i>
+                        <i class="fas fa-seedling" aria-hidden="true"></i>
                         <p id="emptyStateText">कृपया विवरण भरें<br><span class="bilingual">Please fill the details to get crop predictions</span></p>
                     </div>
                 </div>
 
-                <div id="loadingState" class="loading" style="display:none;">
-                    <div class="spinner"></div>
+                <div id="loadingState" class="loading" aria-hidden="true">
+                    <div class="spinner" role="status" aria-label="loading"></div>
                     <p id="loadingText">भविष्यवाणी हो रही है...<br><span class="bilingual">Analyzing your data...</span></p>
                 </div>
             </div>
         </div>
     </div>
-    <!-- END ORIGINAL BODY -->
 
     <script>
-        // --------- Localization (keep from your original) ----------
+        // Language system
         let currentLang = 'hi';
+        
         const translations = {
-            hi: { langText: "English", mainTitle: "किसान मित्र - Crop Predictor", subtitle: "आपकी फसल की भविष्यवाणी करने वाला स्मार्ट सलाहकार", formTitle: "फसल की जानकारी दें", soilLabel: "मिट्टी का प्रकार", soilTooltip: "अपने खेत की मिट्टी का प्रकार चुनें", soilPlaceholder: "मिट्टी चुनें", seasonLabel: "बुवाई का मौसम", seasonTooltip: "आप कब बुवाई करना चाहते हैं?", seasonPlaceholder: "मौसम चुनें", phLabel: "मिट्टी का pH", tempLabel: "तापमान", humidityLabel: "आर्द्रता", nitrogenLabel: "नाइट्रोजन (N)", phosphorusLabel: "फास्फोरस (P)", potassiumLabel: "पोटैशियम (K)", predictBtn: "फसल की भविष्यवाणी करें", emptyStateText: "कृपया विवरण भरें<br><span class=\"bilingual\">Please fill the details to get crop predictions</span>", loadingText: "भविष्यवाणी हो रही है...<br><span class=\"bilingual\">Analyzing your data...</span>", recommendedCrop: "सुझावित फसल", waterSource: "पानी का स्रोत", cropDuration: "फसल की अवधि", waterRequired: "पानी की आवश्यकता", bestSuited: "आपकी मिट्टी के अनुकूल", optimalIrrigation: "बेहतर सिंचाई के लिए", sowingToHarvest: "बुवाई से कटाई तक", perKgProduction: "प्रति किलो उत्पादन" },
-            en: { langText: "हिंदी", mainTitle: "Farmer Friend - Crop Predictor", subtitle: "Your Smart Agricultural Advisor for Crop Prediction", formTitle: "Enter Crop Details", soilLabel: "Soil Type", soilTooltip: "Select the type of soil in your field", soilPlaceholder: "Select Soil", seasonLabel: "Sowing Season", seasonTooltip: "When are you planning to sow?", seasonPlaceholder: "Select Season", phLabel: "Soil pH", tempLabel: "Temperature", humidityLabel: "Humidity", nitrogenLabel: "Nitrogen (N)", phosphorusLabel: "Phosphorus (P)", potassiumLabel: "Potassium (K)", predictBtn: "Predict Crop", emptyStateText: "Please fill the details to get crop predictions", loadingText: "Analyzing your data...", recommendedCrop: "Recommended Crop", waterSource: "Water Source", cropDuration: "Crop Duration", waterRequired: "Water Required", bestSuited: "Best suited for your soil", optimalIrrigation: "For optimal irrigation", sowingToHarvest: "From sowing to harvest", perKgProduction: "Per kg of production" }
+            hi: {
+                langText: "English",
+                mainTitle: "किसान मित्र - Crop Predictor",
+                subtitle: "आपकी फसल की भविष्यवाणी करने वाला स्मार्ट सलाहकार",
+                formTitle: "फसल की जानकारी दें",
+                soilLabel: "मिट्टी का प्रकार",
+                soilTooltip: "अपने खेत की मिट्टी का प्रकार चुनें",
+                soilPlaceholder: "मिट्टी चुनें",
+                seasonLabel: "बुवाई का मौसम",
+                seasonTooltip: "आप कब बुवाई करना चाहते हैं?",
+                seasonPlaceholder: "मौसम चुनें",
+                phLabel: "मिट्टी का pH",
+                tempLabel: "तापमान",
+                humidityLabel: "आर्द्रता",
+                nitrogenLabel: "नाइट्रोजन (N)",
+                phosphorusLabel: "फास्फोरस (P)",
+                potassiumLabel: "पोटैशियम (K)",
+                predictBtn: "फसल की भविष्यवाणी करें",
+                emptyStateText: "कृपया विवरण भरें<br><span class=\"bilingual\">Please fill the details to get crop predictions</span>",
+                loadingText: "भविष्यवाणी हो रही है...<br><span class=\"bilingual\">Analyzing your data...</span>",
+                recommendedCrop: "सुझावित फसल",
+                waterSource: "पानी का स्रोत",
+                cropDuration: "फसल की अवधि",
+                waterRequired: "पानी की आवश्यकता",
+                bestSuited: "आपकी मिट्टी के अनुकूल",
+                optimalIrrigation: "बेहतर सिंचाई के लिए",
+                sowingToHarvest: "बुवाई से कटाई तक",
+                perKgProduction: "प्रति किलो उत्पादन"
+            },
+            en: {
+                langText: "हिंदी",
+                mainTitle: "Farmer Friend - Crop Predictor",
+                subtitle: "Your Smart Agricultural Advisor for Crop Prediction",
+                formTitle: "Enter Crop Details",
+                soilLabel: "Soil Type",
+                soilTooltip: "Select the type of soil in your field",
+                soilPlaceholder: "Select Soil",
+                seasonLabel: "Sowing Season",
+                seasonTooltip: "When are you planning to sow?",
+                seasonPlaceholder: "Select Season",
+                phLabel: "Soil pH",
+                tempLabel: "Temperature",
+                humidityLabel: "Humidity",
+                nitrogenLabel: "Nitrogen (N)",
+                phosphorusLabel: "Phosphorus (P)",
+                potassiumLabel: "Potassium (K)",
+                predictBtn: "Predict Crop",
+                emptyStateText: "Please fill the details to get crop predictions",
+                loadingText: "Analyzing your data...",
+                recommendedCrop: "Recommended Crop",
+                waterSource: "Water Source",
+                cropDuration: "Crop Duration",
+                waterRequired: "Water Required",
+                bestSuited: "Best suited for your soil",
+                optimalIrrigation: "For optimal irrigation",
+                sowingToHarvest: "From sowing to harvest",
+                perKgProduction: "Per kg of production"
+            }
         };
 
         function updateLanguage() {
             const lang = currentLang;
+
             document.getElementById('langText').textContent = translations[lang].langText;
             document.getElementById('mainTitle').textContent = translations[lang].mainTitle;
             document.getElementById('subtitle').textContent = translations[lang].subtitle;
             document.getElementById('formTitle').textContent = translations[lang].formTitle;
-            document.getElementById('soilLabel').innerHTML = translations[lang].soilLabel + `
-                <i class="fas fa-info-circle info-tooltip">
-                    <span class="tooltip-text">${translations[lang].soilTooltip}</span>
-                </i>`;
-            document.getElementById('soilPlaceholder').textContent = translations[lang].soilPlaceholder;
-            document.getElementById('seasonLabel').innerHTML = translations[lang].seasonLabel + `
-                <i class="fas fa-info-circle info-tooltip">
-                    <span class="tooltip-text">${translations[lang].seasonTooltip}</span>
-                </i>`;
-            document.getElementById('seasonPlaceholder').textContent = translations[lang].seasonPlaceholder;
+
+            // Update labels & tooltips
+            document.getElementById('soilLabel').innerHTML = translations[lang].soilLabel + \n                <i class="fas fa-info-circle info-tooltip">\n                    <span class="tooltip-text">${translations[lang].soilTooltip}</span>\n                </i>;
+
+            // Update placeholder text nodes safely
+            const soilPlaceholder = document.getElementById('soilPlaceholder');
+            if (soilPlaceholder) soilPlaceholder.textContent = translations[lang].soilPlaceholder;
+
+            document.getElementById('seasonLabel').innerHTML = translations[lang].seasonLabel + \n                <i class="fas fa-info-circle info-tooltip">\n                    <span class="tooltip-text">${translations[lang].seasonTooltip}</span>\n                </i>;
+
+            const seasonPlaceholder = document.getElementById('seasonPlaceholder');
+            if (seasonPlaceholder) seasonPlaceholder.textContent = translations[lang].seasonPlaceholder;
+
             document.getElementById('phLabel').innerHTML = translations[lang].phLabel + '<span class="bilingual">(6.0 - 8.5)</span>';
             document.getElementById('tempLabel').innerHTML = translations[lang].tempLabel + '<span class="bilingual">(°C)</span>';
             document.getElementById('humidityLabel').innerHTML = translations[lang].humidityLabel + '<span class="bilingual">(%)</span>';
             document.getElementById('nitrogenLabel').innerHTML = translations[lang].nitrogenLabel + '<span class="bilingual">(kg/ha)</span>';
             document.getElementById('phosphorusLabel').innerHTML = translations[lang].phosphorusLabel + '<span class="bilingual">(kg/ha)</span>';
             document.getElementById('potassiumLabel').innerHTML = translations[lang].potassiumLabel + '<span class="bilingual">(kg/ha)</span>';
+
             document.getElementById('predictBtn').textContent = translations[lang].predictBtn;
             document.getElementById('emptyStateText').innerHTML = translations[lang].emptyStateText;
             document.getElementById('loadingText').innerHTML = translations[lang].loadingText;
@@ -206,86 +553,459 @@
 
         document.getElementById('languageToggle').addEventListener('click', function() {
             currentLang = currentLang === 'hi' ? 'en' : 'hi';
+            this.setAttribute('aria-pressed', currentLang === 'en');
             updateLanguage();
         });
 
-        // --------- Backend call code: replace BACKEND_URL before deployment ----------
-        const BACKEND_URL = "https://crop-sage-uj67.onrender.com"; // <-- replace with deployed backend URL (e.g. https://your-backend.onrender.com)
+        // Sample data to simulate ML model predictions with proper emoji display
+        const cropDatabase = {
+            'alluvial_kharif_high_ph': {
+                crop: '🌾 धान | Rice',
+                water_source: '🏞 नदी | River',
+                duration: '⏰ 120 दिन | 120 days',
+                water_required: '💧 1200 लीटर/किग्रा | 1200 L/kg'
+            },
+            'loamy_rabi_neutral_ph': {
+                crop: '🌾 गेहूं | Wheat',
+                water_source: '🕳 कुआं | Borewell',
+                duration: '⏰ 110 दिन | 110 days',
+                water_required: '💧 800 लीटर/किग्रा | 800 L/kg'
+            },
+            'sandy_zaid_neutral_ph': {
+                crop: '🌽 मक्का | Maize',
+                water_source: '💦 ड्रिप सिंचाई | Drip Irrigation',
+                duration: '⏰ 95 दिन | 95 days',
+                water_required: '💧 600 लीटर/किग्रा | 600 L/kg'
+            },
+            'black_kharif_high_ph': {
+                crop: '🌸 कपास | Cotton',
+                water_source: '🌧 बारिश | Rainwater',
+                duration: '⏰ 180 दिन | 180 days',
+                water_required: '💧 1800 लीटर/किग्रा | 1800 L/kg'
+            },
+            'red_rabi_low_ph': {
+                crop: '🫘 दाल | Pulses',
+                water_source: '🏊 तालाब | Pond',
+                duration: '⏰ 85 दिन | 85 days',
+                water_required: '💧 400 लीटर/किग्रा | 400 L/kg'
+            }
+        };
 
-        function showLoading() {
-            document.getElementById('resultsContainer').style.display = 'none';
-            document.getElementById('loadingState').style.display = 'block';
-        }
-        function hideLoading() {
-            document.getElementById('loadingState').style.display = 'none';
-            document.getElementById('resultsContainer').style.display = 'block';
+        function getPredictionKey(soil, sown, ph) {
+            let phCategory = ph < 6.5 ? 'low_ph' : ph > 7.5 ? 'high_ph' : 'neutral_ph';
+            return ${soil}_${sown}_${phCategory};
         }
 
+        function simulateMLPrediction(formData) {
+            const key = getPredictionKey(formData.soil, formData.sown, formData.soil_ph);
+            let prediction = cropDatabase[key];
+
+            if (!prediction) {
+                if (formData.sown === 'kharif') {
+                    if (formData.soil.includes('black') || formData.soil.includes('cotton')) {
+                        prediction = { crop: '🌸 कपास | Cotton', water_source: '🌧 बारिश | Rainwater', duration: '⏰ 180 दिन | 180 days', water_required: '💧 1800 लीटर/किग्रा | 1800 L/kg' };
+                    } else if (formData.soil.includes('alluvial') || formData.soil.includes('clay')) {
+                        prediction = { crop: '🌾 धान | Rice', water_source: '🏞 नदी | River', duration: '⏰ 120 दिन | 120 days', water_required: '💧 1200 लीटर/किग्रा | 1200 L/kg' };
+                    } else if (formData.soil.includes('red')) {
+                        prediction = { crop: '🌽 ज्वार | Sorghum', water_source: '🌧 बारिश | Rainwater', duration: '⏰ 110 दिन | 110 days', water_required: '💧 650 लीटर/किग्रा | 650 L/kg' };
+                    } else {
+                        prediction = { crop: '🌿 बाजरा | Pearl Millet', water_source: '🌧 बारिश | Rainwater', duration: '⏰ 90 दिन | 90 days', water_required: '💧 500 लीटर/किग्रा | 500 L/kg' };
+                    }
+                } else if (formData.sown === 'rabi') {
+                    if (formData.soil.includes('loamy') || formData.soil.includes('alluvial')) {
+                        prediction = { crop: '🌾 गेहूं | Wheat', water_source: '🕳 कुआं | Borewell', duration: '⏰ 110 दिन | 110 days', water_required: '💧 800 लीटर/किग्रा | 800 L/kg' };
+                    } else if (formData.soil.includes('red') || formData.soil.includes('laterite')) {
+                        prediction = { crop: '🫘 दाल | Pulses', water_source: '🏊 तालाब | Pond', duration: '⏰ 85 दिन | 85 days', water_required: '💧 400 लीटर/किग्रा | 400 L/kg' };
+                    } else if (formData.soil.includes('black')) {
+                        prediction = { crop: '🌰 चना | Chickpea', water_source: '💦 ड्रिप सिंचाई | Drip Irrigation', duration: '⏰ 100 दिन | 100 days', water_required: '💧 350 लीटर/किग्रा | 350 L/kg' };
+                    } else {
+                        prediction = { crop: '🌾 जौ | Barley', water_source: '💦 ड्रिप सिंचाई | Drip Irrigation', duration: '⏰ 95 दिन | 95 days', water_required: '💧 550 लीटर/किग्रा | 550 L/kg' };
+                    }
+                } else { // zaid
+                    if (formData.soil.includes('sandy')) {
+                        prediction = { crop: '🌽 मक्का | Maize', water_source: '💦 ड्रिप सिंचाई | Drip Irrigation', duration: '⏰ 95 दिन | 95 days', water_required: '💧 600 लीटर/किग्रा | 600 L/kg' };
+                    } else if (formData.soil.includes('loamy')) {
+                        prediction = { crop: '🥔 आलू | Potato', water_source: '🚰 ट्यूबवेल | Tubewell', duration: '⏰ 90 दिन | 90 days', water_required: '💧 500 लीटर/किग्रा | 500 L/kg' };
+                    } else if (formData.soil.includes('well-drained')) {
+                        prediction = { crop: '🌻 सूरजमुखी | Sunflower', water_source: '💧 स्प्रिंकलर | Sprinkler', duration: '⏰ 100 दिन | 100 days', water_required: '💧 700 लीटर/किग्रा | 700 L/kg' };
+                    } else {
+                        prediction = { crop: '🥒 खीरा | Cucumber', water_source: '💦 ड्रिप सिंचाई | Drip Irrigation', duration: '⏰ 60 दिन | 60 days', water_required: '💧 400 लीटर/किग्रा | 400 L/kg' };
+                    }
+                }
+            }
+
+            return prediction;
+        }
+
+        // ===== Backend config & helper =====
+        const API_CONFIG = {
+            baseURL: 'https://crop-sage-uj67.onrender.com', // Replace with your actual backend URL
+            endpoints: {
+                soilTypes: '/api/soil-types',
+                weatherData: '/api/weather',
+                cropPrediction: '/api/predict-crop',
+                userLocation: '/api/location',
+                health: '/health'
+            }
+        };
+
+        class BackendAPI {
+            static async makeRequest(endpoint, options = {}) {
+                const url = ${API_CONFIG.baseURL}${endpoint};
+                const defaultOptions = {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    }
+                };
+
+                try {
+                    const response = await fetch(url, { ...defaultOptions, ...options });
+                    if (!response.ok) {
+                        throw new Error(HTTP error! status: ${response.status});
+                    }
+
+                    // Some endpoints may return empty body
+                    const text = await response.text();
+                    const data = text ? JSON.parse(text) : {};
+                    return { success: true, data };
+                } catch (error) {
+                    console.error('API Error:', error);
+                    return { success: false, error: error.message };
+                }
+            }
+
+            static async checkHealth() {
+                // Simple health check to see if backend reachable
+                return await this.makeRequest(API_CONFIG.endpoints.health);
+            }
+
+            static async getSoilTypes() {
+                return await this.makeRequest(API_CONFIG.endpoints.soilTypes);
+            }
+
+            static async getWeatherData(latitude, longitude) {
+                const endpoint = ${API_CONFIG.endpoints.weatherData}?lat=${latitude}&lon=${longitude};
+                return await this.makeRequest(endpoint);
+            }
+
+            static async predictCrop(formData) {
+                return await this.makeRequest(API_CONFIG.endpoints.cropPrediction, {
+                    method: 'POST',
+                    body: JSON.stringify(formData)
+                });
+            }
+
+            static async getUserLocation() {
+                return new Promise((resolve, reject) => {
+                    if (!navigator.geolocation) {
+                        reject(new Error('Geolocation is not supported by this browser'));
+                        return;
+                    }
+
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            resolve({
+                                latitude: position.coords.latitude,
+                                longitude: position.coords.longitude
+                            });
+                        },
+                        (error) => {
+                            reject(new Error(Location error: ${error.message}));
+                        },
+                        {
+                            enableHighAccuracy: true,
+                            timeout: 10000,
+                            maximumAge: 300000 // 5 minutes
+                        }
+                    );
+                });
+            }
+        }
+
+        // ===== UI helpers =====
+        function setLoading(isLoading) {
+            const results = document.getElementById('resultsContainer');
+            const loading = document.getElementById('loadingState');
+            const submitBtn = document.getElementById('predictBtnEl');
+
+            if (isLoading) {
+                results.style.display = 'none';
+                loading.style.display = 'block';
+                loading.setAttribute('aria-hidden', 'false');
+                submitBtn.disabled = true;
+                submitBtn.style.opacity = '0.7';
+                submitBtn.style.cursor = 'not-allowed';
+            } else {
+                loading.style.display = 'none';
+                loading.setAttribute('aria-hidden', 'true');
+                submitBtn.disabled = false;
+                submitBtn.style.opacity = '1';
+                submitBtn.style.cursor = 'pointer';
+                results.style.display = 'block';
+            }
+        }
+
+        function displayResults(prediction) {
+            const lang = currentLang;
+            document.getElementById('resultsContainer').innerHTML = `
+                <div class="result-card">
+                    <div class="result-title">
+                        <i class="fas fa-seedling"></i>
+                        ${translations[lang].recommendedCrop}
+                    </div>
+                    <div class="result-value">${prediction.crop}</div>
+                    <div class="result-subtitle">${translations[lang].bestSuited}</div>
+                </div>
+                
+                <div class="result-card">
+                    <div class="result-title">
+                        <i class="fas fa-tint"></i>
+                        ${translations[lang].waterSource}
+                    </div>
+                    <div class="result-value">${prediction.water_source}</div>
+                    <div class="result-subtitle">${translations[lang].optimalIrrigation}</div>
+                </div>
+                
+                <div class="result-card">
+                    <div class="result-title">
+                        <i class="fas fa-calendar-alt"></i>
+                        ${translations[lang].cropDuration}
+                    </div>
+                    <div class="result-value">${prediction.duration}</div>
+                    <div class="result-subtitle">${translations[lang].sowingToHarvest}</div>
+                </div>
+                
+                <div class="result-card">
+                    <div class="result-title">
+                        <i class="fas fa-water"></i>
+                        ${translations[lang].waterRequired}
+                    </div>
+                    <div class="result-value">${prediction.water_required}</div>
+                    <div class="result-subtitle">${translations[lang].perKgProduction}</div>
+                </div>
+
+                ${prediction.confidence ? `
+                <div class="result-card" style="border-left-color: #2196F3;">
+                    <div class="result-title">
+                        <i class="fas fa-chart-line"></i>
+                        Prediction Confidence
+                    </div>
+                    <div class="result-value">${Math.round(prediction.confidence * 100)}%</div>
+                    <div class="result-subtitle">Model accuracy for this prediction</div>
+                </div>
+                ` : ''}
+            `;
+        }
+
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = notification notification-${type};
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: ${type === 'success' ? '#4CAF50' : type === 'warning' ? '#FF9800' : '#2196F3'};
+                color: white;
+                padding: 15px 20px;
+                border-radius: 10px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                z-index: 1000;
+                transform: translateX(400px);
+                transition: transform 0.3s ease;
+                font-weight: 500;
+                max-width: 300px;
+            `;
+            notification.textContent = message;
+
+            document.body.appendChild(notification);
+
+            // Animate in
+            setTimeout(() => {
+                notification.style.transform = 'translateX(0)';
+            }, 100);
+
+            // Remove after 4 seconds
+            setTimeout(() => {
+                notification.style.transform = 'translateX(400px)';
+                setTimeout(() => {
+                    document.body.removeChild(notification);
+                }, 300);
+            }, 4000);
+        }
+
+        function showErrorMessage(message) {
+            document.getElementById('resultsContainer').innerHTML = `
+                <div class="result-card" style="border-left-color: #f44336;">
+                    <div class="result-title" style="color: #f44336;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Error
+                    </div>
+                    <div class="result-value" style="color: #f44336; font-size: 1.2rem;">${message}</div>
+                    <div class="result-subtitle">Please check your connection and try again</div>
+                </div>
+            `;
+        }
+
+        // Auto-fill weather data based on location
+        async function autoFillWeatherData() {
+            try {
+                const location = await BackendAPI.getUserLocation();
+                const weatherResponse = await BackendAPI.getWeatherData(location.latitude, location.longitude);
+                
+                if (weatherResponse.success) {
+                    const weather = weatherResponse.data;
+                    document.getElementById('temp').value = Math.round(weather.temperature) || '';
+                    document.getElementById('humidity').value = Math.round(weather.humidity) || '';
+                    showNotification('Weather data updated based on your location!', 'success');
+                } else {
+                    showNotification('Could not fetch weather data', 'warning');
+                }
+            } catch (error) {
+                console.error('Weather data error:', error);
+                showNotification('Location access denied or unavailable', 'info');
+            }
+        }
+
+        // Load soil types from backend (if available)
+        async function loadSoilTypes() {
+            try {
+                const soilResponse = await BackendAPI.getSoilTypes();
+                if (soilResponse.success && Array.isArray(soilResponse.data) && soilResponse.data.length > 0) {
+                    const soilSelect = document.getElementById('soil');
+                    const placeholder = soilSelect.querySelector('#soilPlaceholder');
+
+                    // Clear existing options but keep placeholder element
+                    soilSelect.innerHTML = '';
+                    soilSelect.appendChild(placeholder);
+
+                    soilResponse.data.forEach(soil => {
+                        const option = document.createElement('option');
+                        option.value = soil.code || soil.id || soil.name_en.toLowerCase().replace(/\s+/g, '-');
+                        option.textContent = ${soil.name_hi || soil.name} | ${soil.name_en || soil.name};
+                        soilSelect.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to load soil types from backend:', error);
+                // Keep existing hardcoded options as fallback
+            }
+        }
+
+        // Form handling using backend when available, fallback to local simulate
+        async function handleFormSubmission(formData) {
+            try {
+                setLoading(true);
+
+                const backendResponse = await BackendAPI.predictCrop({
+                    ...formData,
+                    timestamp: new Date().toISOString(),
+                    userAgent: navigator.userAgent,
+                    language: currentLang
+                });
+
+                let prediction;
+                if (backendResponse.success && backendResponse.data && Object.keys(backendResponse.data).length > 0) {
+                    prediction = backendResponse.data;
+                } else {
+                    prediction = simulateMLPrediction(formData);
+                }
+
+                setLoading(false);
+                displayResults(prediction);
+            } catch (error) {
+                console.error('Prediction error:', error);
+                setLoading(false);
+                showErrorMessage('Unable to get prediction. Please try again.');
+            }
+        }
+
+        // Add weather auto-fill button
+        function addWeatherButton() {
+            const weatherBtn = document.createElement('button');
+            weatherBtn.type = 'button';
+            weatherBtn.className = 'weather-btn';
+            weatherBtn.innerHTML = '<i class="fas fa-cloud-sun"></i> Auto-fill Weather';
+            weatherBtn.style.cssText = `
+                background: linear-gradient(45deg, #3498db, #2980b9);
+                color: white;
+                border: none;
+                padding: 10px 15px;
+                border-radius: 8px;
+                cursor: pointer;
+                margin-bottom: 15px;
+                font-size: 0.9rem;
+                transition: all 0.3s ease;
+                width: 100%;
+            `;
+            weatherBtn.addEventListener('click', autoFillWeatherData);
+            weatherBtn.addEventListener('mouseover', function() {
+                this.style.transform = 'translateY(-2px)';
+                this.style.boxShadow = '0 5px 15px rgba(52, 152, 219, 0.3)';
+            });
+            weatherBtn.addEventListener('mouseout', function() {
+                this.style.transform = 'translateY(0)';
+                this.style.boxShadow = 'none';
+            });
+
+            const firstFormRow = document.querySelector('.form-row');
+            firstFormRow.parentNode.insertBefore(weatherBtn, firstFormRow);
+        }
+
+        // Prevent duplicate submit handlers and wire the single handler
         document.getElementById('cropForm').addEventListener('submit', async function(e) {
             e.preventDefault();
-            showLoading();
 
-            const payload = {
-                SOIL: document.getElementById('soil').value,
-                SOWN: document.getElementById('sown').value,
-                SOIL_PH: parseFloat(document.getElementById('soil_ph').value),
-                TEMP: parseFloat(document.getElementById('temp').value),
-                RELATIVE_HUMIDITY: parseFloat(document.getElementById('humidity').value),
-                N: parseFloat(document.getElementById('nitrogen').value),
-                P: parseFloat(document.getElementById('phosphorus').value),
-                K: parseFloat(document.getElementById('potassium').value)
-            };
+            const soil = document.getElementById('soil').value;
+            const sown = document.getElementById('sown').value;
+            const soil_ph = parseFloat(document.getElementById('soil_ph').value);
+            const temp = parseFloat(document.getElementById('temp').value);
+            const humidity = parseFloat(document.getElementById('humidity').value);
+            const nitrogen = parseFloat(document.getElementById('nitrogen').value);
+            const phosphorus = parseFloat(document.getElementById('phosphorus').value);
+            const potassium = parseFloat(document.getElementById('potassium').value);
 
-            try {
-                const res = await fetch(`${BACKEND_URL}/predict`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(payload)
-                });
-                if (!res.ok) throw new Error('API error: ' + res.status);
-                const data = await res.json();
-                hideLoading();
-
-                const lang = currentLang;
-                document.getElementById('resultsContainer').innerHTML = `
-                    <div class="result-card">
-                        <div class="result-title"><i class="fas fa-seedling"></i> ${translations[lang].recommendedCrop}</div>
-                        <div class="result-value">${data.crop.label} (${(data.crop.confidence*100).toFixed(1)}%)</div>
-                        <div class="result-subtitle">${translations[lang].bestSuited}</div>
-                    </div>
-
-                    <div class="result-card">
-                        <div class="result-title"><i class="fas fa-tint"></i> ${translations[lang].waterSource}</div>
-                        <div class="result-value">${data.water_source.label} (${(data.water_source.confidence*100).toFixed(1)}%)</div>
-                        <div class="result-subtitle">${translations[lang].optimalIrrigation}</div>
-                    </div>
-
-                    <div class="result-card">
-                        <div class="result-title"><i class="fas fa-calendar-alt"></i> ${translations[lang].cropDuration}</div>
-                        <div class="result-value">${Math.round(data.crop_duration)} days</div>
-                        <div class="result-subtitle">${translations[lang].sowingToHarvest}</div>
-                    </div>
-
-                    <div class="result-card">
-                        <div class="result-title"><i class="fas fa-water"></i> ${translations[lang].waterRequired}</div>
-                        <div class="result-value">${Math.round(data.water_required)} L/kg</div>
-                        <div class="result-subtitle">${translations[lang].perKgProduction}</div>
-                    </div>
-                `;
-            } catch (err) {
-                hideLoading();
-                document.getElementById('resultsContainer').innerHTML = `<div class="result-card"><div class="result-title">Error</div><div class="result-value">${err.message}</div></div>`;
+            // Basic client-side validation
+            if (!soil || !sown || isNaN(soil_ph) || isNaN(temp) || isNaN(humidity)) {
+                showNotification('कृपया सभी आवश्यक फ़ील्ड भरें / Please fill all required fields', 'warning');
+                return;
             }
+
+            const formData = { soil, sown, soil_ph, temp, humidity, nitrogen, phosphorus, potassium };
+            await handleFormSubmission(formData);
         });
 
-        // small UI niceties
+        // Small focus/blur animations for inputs
         const inputs = document.querySelectorAll('.form-control');
         inputs.forEach(input => {
-            input.addEventListener('focus', function() { this.style.transform = 'scale(1.02)'; });
-            input.addEventListener('blur', function() { this.style.transform = 'scale(1)'; });
+            input.addEventListener('focus', function() {
+                this.style.transform = 'scale(1.02)';
+            });
+            input.addEventListener('blur', function() {
+                this.style.transform = 'scale(1)';
+            });
         });
 
-        updateLanguage();
+        // Initialize the application
+        async function initializeApp() {
+            updateLanguage();
+            addWeatherButton();
+
+            try {
+                const healthCheck = await BackendAPI.checkHealth();
+                if (healthCheck.success) {
+                    showNotification('✅ Connected to Crop Sage AI Backend!', 'success');
+                    await loadSoilTypes();
+                } else {
+                    showNotification('⚠ Backend offline - using local features', 'warning');
+                }
+            } catch (error) {
+                console.error('Health check failed:', error);
+                showNotification('🔄 Working in offline mode', 'info');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', initializeApp);
     </script>
 </body>
 </html>

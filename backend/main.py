@@ -1,27 +1,124 @@
 # main.py
-# top — MUST come before importing tensorflow
+# Matches your training artifacts from fixed_robust_crop_model.py
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = ""   # force CPU-only; prevents TF from trying to init CUDA
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # reduce TF logs
+os.environ["CUDA_VISIBLE_DEVICES"] = ""   # force CPU-only
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 import pickle
+from typing import Union, Dict, Any, Optional, List
 import numpy as np
 import tensorflow as tf
-from typing import Union, Dict, Any, Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, validator
 from fastapi.middleware.cors import CORSMiddleware
 
-# optional weather proxy
-try:
-    import requests
-except Exception:
-    requests = None
+# App
+app = FastAPI(title="Crop Sage API - model-compatible")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # tighten in production
+    allow_methods=["*"],
+    allow_headers=["*"],
+    allow_credentials=True,
+)
+
+# Artifacts directory and filenames (match your training saver)
+ART_DIR = os.environ.get("ARTIFACTS_DIR", "artifacts")
+MODEL_FILE = os.path.join(ART_DIR, "model.keras")
+SCALER_X_FILE = os.path.join(ART_DIR, "scaler_x.pkl")
+DUR_SCALER_FILE = os.path.join(ART_DIR, "dur_scaler.pkl")
+WREQ_SCALER_FILE = os.path.join(ART_DIR, "wreq_scaler.pkl")
+LE_NAME_FILE = os.path.join(ART_DIR, "le_name.pkl")
+LE_WATER_FILE = os.path.join(ART_DIR, "le_water.pkl")
+SOIL_TO_IDX_FILE = os.path.join(ART_DIR, "soil_to_idx.pkl")
+SOWN_TO_IDX_FILE = os.path.join(ART_DIR, "sown_to_idx.pkl")
+
+# Globals
+model: Optional[tf.keras.Model] = None
+scaler_x = None
+dur_scaler = None
+wreq_scaler = None
+le_name = None
+le_water = None
+soil_to_idx: Dict[str, int] = {}
+sown_to_idx: Dict[str, int] = {}
+
+# ---------- Utilities ----------
+def load_pickle(path):
+    if not os.path.exists(path):
+        raise RuntimeError(f"Required artifact missing: {path}")
+    with open(path, "rb") as f:
+        return pickle.load(f)
+
+def safe_list(obj) -> List[str]:
+    if obj is None:
+        return []
+    if hasattr(obj, "classes_"):
+        try:
+            return list(getattr(obj, "classes_"))
+        except Exception:
+            pass
+    try:
+        return list(obj)
+    except Exception:
+        return []
+
+def month_name_to_number_token(s: str) -> Optional[str]:
+    """
+    Convert a month name or abbreviation to token string "1".."12".
+    Returns None if not a month name.
+    """
+    if not isinstance(s, str):
+        return None
+    s = s.strip().lower()
+    month_map = {
+        "jan":"1","january":"1","feb":"2","february":"2","mar":"3","march":"3","apr":"4","april":"4",
+        "may":"5","jun":"6","june":"6","jul":"7","july":"7","aug":"8","august":"8","sep":"9","sept":"9","september":"9",
+        "oct":"10","october":"10","nov":"11","november":"11","dec":"12","december":"12"
+    }
+    return month_map.get(s)
+
+def season_to_representative_month_token(season: str) -> Optional[str]:
+    """
+    If frontend sends season words like 'kharif','rabi','zaid', map to representative month token.
+    These are heuristics — change if you prefer other representative months.
+    """
+    if not isinstance(season, str):
+        return None
+    s = season.strip().lower()
+    if s in ("kharif", "khareef", "kharif "):
+        return "7"   # July (monsoon)
+    if s in ("rabi",):
+        return "11"  # November (typical rabi sowing month)
+    if s in ("zaid", "zayed", "zaid "):
+        return "4"   # April
+    return None
+
+def ensure_loaded():
+    if model is None:
+        raise HTTPException(status_code=503, detail="Server artifacts not loaded; restart and check logs.")
+
+# ---------- Startup: load artifacts ----------
+@app.on_event("startup")
+def startup_load():
+    global model, scaler_x, dur_scaler, wreq_scaler, le_name, le_water, soil_to_idx, sown_to_idx
+    # model
+    if not os.path.exists(MODEL_FILE):
+        raise RuntimeError(f"Model file not found: {MODEL_FILE}")
+    model = tf.keras.models.load_model(MODEL_FILE)
+
+    # pickles
+    scaler_x = load_pickle(SCALER_X_FILE)
+    dur_scaler = load_pickle(DUR_SCALER_FILE)
+    wreq_scaler = load_pickle(WREQ_SCALER_FILE)
+    le_name = load_pickle(LE_NAME_FILE)
+    le_water = load_pickle(LE_WATER_FILE)
+    soil_to_idx = load_pickle(SOIL_TO_IDX_FILE)
+    sown_to_idx = load_pickle(SOWN_TO_IDX_FILE)
 
 # ---------- Request schema ----------
 class PredictRequest(BaseModel):
     SOIL: str
-    # SOWN can be a month number (1-12) or a season string like 'kharif'
     SOWN: Union[int, str]
     SOIL_PH: float
     TEMP: float
@@ -31,252 +128,192 @@ class PredictRequest(BaseModel):
     K: float
 
     @validator("SOWN")
-    def validate_sown(cls, v):
-        # Accept int months 1..12 or non-empty string
+    def sown_must_be_month_or_string(cls, v):
         if isinstance(v, int):
             if not (1 <= v <= 12):
-                raise ValueError("SOWN month must be between 1 and 12")
+                raise ValueError("SOWN month must be 1..12")
         elif isinstance(v, str):
-            if not v:
-                raise ValueError("SOWN string must be non-empty")
+            if not v.strip():
+                raise ValueError("SOWN must be non-empty string or month number")
         else:
-            raise ValueError("SOWN must be integer month (1-12) or season string")
+            raise ValueError("SOWN must be integer month or string")
         return v
 
-# ---------- App setup ----------
-app = FastAPI(title="Crop Sage API")
+# ---------- Helper to map inputs to model indices ----------
+def map_soil_token(soil_raw: str) -> int:
+    s = str(soil_raw).strip()
+    # try direct match
+    if s in soil_to_idx:
+        return int(soil_to_idx[s])
+    # try lowercase variant
+    s_low = s.lower()
+    if s_low in soil_to_idx:
+        return int(soil_to_idx[s_low])
+    # try title-case
+    s_title = s.title()
+    if s_title in soil_to_idx:
+        return int(soil_to_idx[s_title])
+    # fallback: unknown index (training used len(soil_to_idx) as unknown)
+    return int(len(soil_to_idx))
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # tighten in production
-    allow_methods=["*"],
-    allow_headers=["*"],
-    allow_credentials=True,
-)
-
-# ---------- Globals for artifacts ----------
-model: Optional[tf.keras.Model] = None
-soil_encoder = None
-sown_encoder = None
-water_source_encoder = None
-crop_name_encoder = None
-scaler = None
-cd_scaler = None
-wr_scaler = None
-
-ART_DIR = os.environ.get("ARTIFACTS_DIR", "artifacts")
-MODEL_FILE = os.environ.get("MODEL_FILE", "crop_model.keras")
-
-# ---------- Helpers ----------
-def month_to_season_label(month: int) -> str:
+def map_sown_token(sown_raw: Union[int, str]) -> int:
     """
-    Map month number (1-12) to season label used by the encoder.
-    Mapping (India typical):
-      - Mar(3) - May(5)  -> 'zaid'
-      - Jun(6) - Sep(9)  -> 'kharif'
-      - Oct(10) - Feb(2) -> 'rabi'
+    Convert frontend SOWN -> model sown_idx int.
+    Accepts: integer 1..12 -> "1".."12" tokens, month names, numeric strings,
+             or season names (kharif/rabi/zaid) -> mapped to representative month token.
+    If token not present in sown_to_idx, returns len(sown_to_idx) as unknown index (matches training).
     """
-    if not isinstance(month, int):
-        raise ValueError("month must be int")
-    if 3 <= month <= 5:
-        return "zaid"
-    if 6 <= month <= 9:
-        return "kharif"
-    # months 10,11,12,1,2
-    return "rabi"
+    # if int -> token string
+    if isinstance(sown_raw, int):
+        token = str(int(sown_raw))
+    else:
+        s = str(sown_raw).strip()
+        # numeric string?
+        if s.isdigit():
+            token = str(int(s))
+        else:
+            # month name -> number token
+            month_token = month_name_to_number_token(s)
+            if month_token is not None:
+                token = month_token
+            else:
+                # season heuristic mapping (kharif/rabi/zaid)
+                season_token = season_to_representative_month_token(s)
+                if season_token is not None:
+                    token = season_token
+                else:
+                    # normalization attempts
+                    s_low = s.lower()
+                    s_title = s.title()
+                    if s in sown_to_idx:
+                        token = s
+                    elif s_low in sown_to_idx:
+                        token = s_low
+                    elif s_title in sown_to_idx:
+                        token = s_title
+                    else:
+                        # fallback to original string token (maybe training used those strings)
+                        token = s
+    # map token to index
+    if token in sown_to_idx:
+        return int(sown_to_idx[token])
+    # try normalized numeric token forms (strip leading zeros)
+    try:
+        if token.lstrip("0").isdigit():
+            t = str(int(token))
+            if t in sown_to_idx:
+                return int(sown_to_idx[t])
+    except Exception:
+        pass
+    # unknown fallback index (matches training code map_or_unknown behavior)
+    return int(len(sown_to_idx))
 
-def ensure_loaded():
-    """Raise helpful error if artifacts not loaded"""
-    global model
-    if model is None:
-        raise HTTPException(status_code=503, detail="Model artifacts not loaded. Check server startup logs.")
+# ---------- Prediction logic ----------
+def predict_from_payload(payload: PredictRequest) -> Dict[str, Any]:
+    ensure_loaded()
+    # soil index
+    soil_token = str(payload.SOIL).strip()
+    soil_idx = map_soil_token(soil_token)
 
-# ---------- Startup: load artifacts ----------
-@app.on_event("startup")
-def load_artifacts():
-    global model, soil_encoder, sown_encoder, water_source_encoder, crop_name_encoder, scaler, cd_scaler, wr_scaler
-    base = ART_DIR
+    # sown index
+    sown_idx = map_sown_token(payload.SOWN)
 
-    # load model
-    model_path = os.path.join(base, MODEL_FILE)
-    if not os.path.exists(model_path):
-        raise RuntimeError(f"Model file not found at {model_path}")
-    model = tf.keras.models.load_model(model_path)
+    # numeric features and scale (order MUST match training NUM_INPUTS: ["SOIL_PH","TEMP","RELATIVE_HUMIDITY","N","P","K"])
+    numeric = np.array([[payload.SOIL_PH, payload.TEMP, payload.RELATIVE_HUMIDITY, payload.N, payload.P, payload.K]], dtype=np.float32)
+    try:
+        numeric_scaled = scaler_x.transform(numeric).astype(np.float32)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Numeric scaler transform failed: {e}")
 
-    # load pickled encoders & scalers
-    def _load_pickle(name):
-        p = os.path.join(base, name)
-        if not os.path.exists(p):
-            raise RuntimeError(f"Required artifact missing: {p}")
-        with open(p, "rb") as f:
-            return pickle.load(f)
+    # build arrays consistent with training shapes
+    soil_in = np.array([soil_idx], dtype=np.int32)
+    sown_in = np.array([sown_idx], dtype=np.int32)
+    num_in = numeric_scaled  # already shape (1, n_features)
 
-    soil_encoder = _load_pickle("soil_encoder.pkl")
-    sown_encoder = _load_pickle("sown_encoder.pkl")
-    water_source_encoder = _load_pickle("water_source_encoder.pkl")
-    crop_name_encoder = _load_pickle("crop_name_encoder.pkl")
-    scaler = _load_pickle("scaler.pkl")
-    cd_scaler = _load_pickle("cd_scaler.pkl")
-    wr_scaler = _load_pickle("wr_scaler.pkl")
+    # model predict. training model outputs: [name_out, water_out, dur_out, wreq_out]
+    try:
+        preds = model.predict({"soil_in": soil_in, "sown_in": sown_in, "num_in": num_in}, verbose=0)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Model prediction failed: {e}")
 
-# ---------- Simple health endpoint ----------
+    # parse outputs safely
+    try:
+        name_probs = np.array(preds[0])[0]      # shape (n_name_classes,)
+        water_probs = np.array(preds[1])[0]     # shape (n_water_classes,)
+        dur_scaled = np.array(preds[2]).reshape(-1)[0]   # single value
+        wreq_scaled = np.array(preds[3]).reshape(-1)[0]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected model output shape: {e}")
+
+    # pick indices
+    name_idx = int(np.argmax(name_probs))
+    water_idx = int(np.argmax(water_probs))
+    name_conf = float(name_probs[name_idx])
+    water_conf = float(water_probs[water_idx])
+
+    # decode labels via LabelEncoders saved during training (le_name, le_water)
+    try:
+        crop_label = str(le_name.inverse_transform([name_idx])[0])
+    except Exception:
+        # fallback to class list
+        crop_label = str(safe_list(le_name)[name_idx] if name_idx < len(safe_list(le_name)) else name_idx)
+
+    try:
+        water_label = str(le_water.inverse_transform([water_idx])[0])
+    except Exception:
+        water_label = str(safe_list(le_water)[water_idx] if water_idx < len(safe_list(le_water)) else water_idx)
+
+    # inverse-scale regression outputs
+    try:
+        crop_duration = float(dur_scaler.inverse_transform(np.array([[dur_scaled]]))[0, 0])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Crop duration inverse scaling failed: {e}")
+
+    try:
+        water_required = float(wreq_scaler.inverse_transform(np.array([[wreq_scaled]]))[0, 0])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Water required inverse scaling failed: {e}")
+
+    return {
+        "crop": {"label": crop_label, "confidence": name_conf},
+        "water_source": {"label": water_label, "confidence": water_conf},
+        "crop_duration": crop_duration,
+        "water_required": water_required
+    }
+
+# ---------- Endpoints ----------
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
-# ---------- Core prediction logic (shared) ----------
-def do_predict_logic(payload: PredictRequest) -> Dict[str, Any]:
-    """
-    Shared prediction routine; accepts PredictRequest and returns structured result.
-    Handles SOWN as month number or string by mapping to encoder's expected category.
-    """
-    ensure_loaded()
+@app.post("/api/predict-crop")
+def api_predict_crop(req: PredictRequest):
+    return predict_from_payload(req)
 
-    # Normalize and encode SOIL
-    soil_val = str(payload.SOIL).strip()
-    if soil_val == "":
-        raise HTTPException(status_code=400, detail="SOIL must be a non-empty string")
-    try:
-        soil_enc = int(soil_encoder.transform([soil_val])[0])
-    except Exception as e:
-        # Helpful message if unknown category
-        raise HTTPException(status_code=400, detail=f"Unknown SOIL category '{soil_val}': {e}")
-
-    # Handle SOWN: month number or existing season string
-    sown_input = payload.SOWN
-    if isinstance(sown_input, int):
-        # convert month -> season label
-        try:
-            sown_label = month_to_season_label(int(sown_input))
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid SOWN month: {e}")
-    else:
-        sown_label = str(sown_input).strip()
-
-    if sown_label == "":
-        raise HTTPException(status_code=400, detail="SOWN must be a valid month (1-12) or non-empty season string")
-
-    try:
-        sown_enc = int(sown_encoder.transform([sown_label])[0])
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Unknown SOWN category '{sown_label}': {e}")
-
-    # Numeric array and scaling (same numeric columns used in training)
-    numeric = np.array([[payload.SOIL_PH, payload.TEMP, payload.RELATIVE_HUMIDITY, payload.N, payload.P, payload.K]], dtype=np.float32)
-    try:
-        numeric_scaled = scaler.transform(numeric)  # scaler expects shape (n_samples, n_numeric_cols)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Scaler transform failed: {e}")
-
-    # Build final feature vector: [soil_enc, sown_enc, numeric_scaled...]
-    try:
-        features = np.concatenate([[soil_enc, sown_enc], numeric_scaled[0]]).reshape(1, -1).astype(np.float32)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Feature vector build failed: {e}")
-
-    # Predict
-    try:
-        preds = model.predict(features, verbose=0)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Model prediction failed: {e}")
-
-    # Model is expected to output a list-like of 4 outputs:
-    # preds[0] -> crop softmax (shape (1, n_crop_classes))
-    # preds[1] -> water source softmax (shape (1, n_ws_classes))
-    # preds[2] -> crop_duration scaled (shape (1, 1))
-    # preds[3] -> water_required scaled (shape (1, 1))
-    try:
-        crop_prob = preds[0][0]
-        ws_prob = preds[1][0]
-        cd_scaled = np.array(preds[2]).reshape(-1, 1)
-        wr_scaled = np.array(preds[3]).reshape(-1, 1)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Unexpected model output shape or type: {e}")
-
-    # indices -> labels
-    crop_idx = int(np.argmax(crop_prob))
-    ws_idx = int(np.argmax(ws_prob))
-
-    try:
-        crop_label = crop_name_encoder.inverse_transform([crop_idx])[0]
-    except Exception:
-        # Some encoders map differently; try safe fallback
-        try:
-            crop_label = str(crop_name_encoder.classes_[crop_idx])
-        except Exception:
-            crop_label = str(crop_idx)
-
-    try:
-        ws_label = water_source_encoder.inverse_transform([ws_idx])[0]
-    except Exception:
-        try:
-            ws_label = str(water_source_encoder.classes_[ws_idx])
-        except Exception:
-            ws_label = str(ws_idx)
-
-    # inverse-scale regression outputs
-    try:
-        cd_orig = float(cd_scaler.inverse_transform(cd_scaled)[0, 0])
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Crop-duration inverse-scaling failed: {e}")
-    try:
-        wr_orig = float(wr_scaler.inverse_transform(wr_scaled)[0, 0])
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Water-required inverse-scaling failed: {e}")
-
-    result = {
-        "crop": {"label": str(crop_label), "confidence": float(crop_prob[crop_idx])},
-        "water_source": {"label": str(ws_label), "confidence": float(ws_prob[ws_idx])},
-        "crop_duration": cd_orig,
-        "water_required": wr_orig
-    }
-    return result
-
-# ---------- Endpoints ----------
 @app.post("/predict")
-def predict(req: PredictRequest):
-    return do_predict_logic(req)
-
-@app.get("/labels")
-def labels():
-    ensure_loaded()
-    return {
-        "crop_classes": list(getattr(crop_name_encoder, "classes_", [])),
-        "water_source_classes": list(getattr(water_source_encoder, "classes_", []))
-    }
-
-# API aliases expected by frontend
-@app.get("/api/labels")
-def api_labels():
-    return labels()
+def predict_alias(req: PredictRequest):
+    return predict_from_payload(req)
 
 @app.get("/api/soil-types")
 def api_soil_types():
     ensure_loaded()
-    # soil_encoder.classes_ expected to be an array-like of soil labels
-    classes = getattr(soil_encoder, "classes_", None)
-    if classes is None:
-        # if encoder is a dict or custom, try to fall back to keys if available
-        try:
-            # e.g., if it's a mapping object with `.classes_` missing
-            return {"soil_types": list(soil_encoder)}
-        except Exception:
-            raise HTTPException(status_code=500, detail="Soil encoder does not expose classes.")
-    return {"soil_types": list(classes)}
+    # expose keys (useful to populate frontend select; they are the original training tokens)
+    return {"soil_types": list(soil_to_idx.keys())}
 
-@app.post("/api/predict-crop")
-def api_predict_crop(req: PredictRequest):
-    return do_predict_logic(req)
+@app.get("/api/labels")
+def api_labels():
+    ensure_loaded()
+    return {
+        "crop_classes": safe_list(le_name),
+        "water_source_classes": safe_list(le_water)
+    }
 
-# Optional weather proxy endpoint
-@app.get("/api/weather")
-def api_weather(lat: float, lon: float):
-    if requests is None:
-        raise HTTPException(status_code=501, detail="Weather proxy requires 'requests' package on the server.")
-    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,relativehumidity_2m"
-    try:
-        r = requests.get(url, timeout=6)
-        r.raise_for_status()
-    except requests.RequestException as e:
-        raise HTTPException(status_code=502, detail=f"Weather fetch failed: {e}")
-    return r.json()
+@app.get("/api/debug/encoders")
+def api_debug_encoders():
+    ensure_loaded()
+    return {
+        "soil_to_idx_keys": list(soil_to_idx.keys()),
+        "sown_to_idx_keys": list(sown_to_idx.keys()),
+        "le_name_classes": safe_list(le_name),
+        "le_water_classes": safe_list(le_water)
+    }

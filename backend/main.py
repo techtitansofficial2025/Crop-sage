@@ -41,8 +41,43 @@ WREQ_SCALER_CANDIDATES = ["wreq_scaler.pkl", "wr_scaler.pkl", "wreq_scaler", "wr
 LE_NAME_CANDIDATES = ["le_name.pkl", "crop_name_encoder.pkl", "name_encoder.pkl", "le_name"]
 LE_WATER_CANDIDATES = ["le_water.pkl", "water_source_encoder.pkl", "water_encoder.pkl", "le_water"]
 
-SOIL_TO_IDX_CANDIDATES = ["soil_to_idx.pkl", "soil_encoder.pkl", "soil_encoder_map.pkl", "soil_to_idx"]
-SOWN_TO_IDX_CANDIDATES = ["sown_to_idx.pkl", "sown_encoder.pkl", "sown_encoder_map.pkl", "sown_to_idx"]
+from sklearn.preprocessing import LabelEncoder
+
+def to_mapping(obj, name):
+    """
+    Accepts:
+      - dict-like mapping -> return unchanged
+      - LabelEncoder -> produce {str(class): idx}
+      - list/ndarray of classes -> produce mapping
+    Raises helpful error otherwise.
+    """
+    # already a dict-like
+    if isinstance(obj, dict):
+        return obj
+    # sklearn LabelEncoder
+    if hasattr(obj, "classes_"):
+        try:
+            classes = list(obj.classes_)
+            return { str(c): int(i) for i, c in enumerate(classes) }
+        except Exception:
+            raise RuntimeError(f"Failed to convert LabelEncoder for {name} to mapping.")
+    # list/array-like of classes
+    try:
+        # numpy arrays or lists of classes
+        if hasattr(obj, "__iter__") and not isinstance(obj, (str, bytes)):
+            classes = list(obj)
+            return { str(c): int(i) for i, c in enumerate(classes) }
+    except Exception:
+        pass
+    raise RuntimeError(f"Unsupported artifact type for {name}; expected dict, LabelEncoder, or list of classes.")
+
+# load and normalize soil/sown artifacts
+_raw_soil = load_pickle_any(SOIL_TO_IDX_CANDIDATES)
+soil_to_idx = to_mapping(_raw_soil, "soil_to_idx")
+
+_raw_sown = load_pickle_any(SOWN_TO_IDX_CANDIDATES)
+sown_to_idx = to_mapping(_raw_sown, "sown_to_idx")
+
 
 # Globals
 model: Optional[tf.keras.Model] = None

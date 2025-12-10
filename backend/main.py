@@ -1,9 +1,9 @@
 # backend/main.py
-# Robust artifact loader for Crop Sage API
-# Paste into backend/main.py, commit and redeploy.
+# Robust Crop Sage backend - flexible artifact loader + adaptive prediction
+# Paste into backend/main.py, commit & redeploy.
 
 import os
-# Force CPU-only for TF (must be set before importing tensorflow)
+# Must set before importing tensorflow to avoid GPU init attempts
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
@@ -19,13 +19,12 @@ from fastapi.middleware.cors import CORSMiddleware
 # ---------- configuration ----------
 ART_DIR = os.environ.get("ARTIFACTS_DIR", "artifacts")
 
-# candidate names relative to ART_DIR (order matters)
 MODEL_CANDIDATES = [
     "model.keras",
     "crop_model.keras",
     "best_final.keras",
     "best_stage1.keras",
-    "model",  # sometimes folder
+    "model",
 ]
 
 SCALER_X_CANDIDATES = ["scaler_x.pkl", "scaler.pkl", "scaler_x", "scaler"]
@@ -38,7 +37,7 @@ LE_WATER_CANDIDATES = ["le_water.pkl", "water_source_encoder.pkl", "water_encode
 SOIL_TO_IDX_CANDIDATES = ["soil_to_idx.pkl", "soil_encoder.pkl", "soil_encoder_map.pkl", "soil_to_idx"]
 SOWN_TO_IDX_CANDIDATES = ["sown_to_idx.pkl", "sown_encoder.pkl", "sown_encoder_map.pkl", "sown_to_idx"]
 
-# ---------- helper functions (must be defined before usage) ----------
+# ---------- helper functions (defined before usage) ----------
 def abs_paths(candidates: List[str]) -> List[str]:
     return [os.path.join(ART_DIR, p) for p in candidates]
 
@@ -50,7 +49,7 @@ def find_first_existing_path(candidates: List[str]) -> Optional[str]:
 
 def load_pickle_any(candidates: List[str]) -> Any:
     """
-    Try candidate filenames and return the first pickle loaded.
+    Try candidate filenames in ART_DIR; return first pickle-loaded object.
     Raises RuntimeError if none exist.
     """
     for p in abs_paths(candidates):
@@ -61,7 +60,7 @@ def load_pickle_any(candidates: List[str]) -> Any:
 
 def safe_list(obj) -> List[Any]:
     """
-    Return a list representation for encoder-like objects or lists.
+    Return list for encoder-like objects or lists. Useful for JSON responses.
     """
     if obj is None:
         return []
@@ -77,13 +76,10 @@ def safe_list(obj) -> List[Any]:
 
 def to_mapping(obj: Any, name: str) -> Dict[str, int]:
     """
-    Convert obj into a mapping token->index. Accept:
-      - dict -> return unchanged (cast keys->str, values->int)
-      - LabelEncoder-like (has classes_) -> use classes_ and enumerate
-      - list/ndarray of classes -> enumerate
+    Convert obj into a mapping token->index.
+    Accepts dict, LabelEncoder-like (.classes_), list/ndarray.
     """
     if isinstance(obj, dict):
-        # normalize keys and values
         return { str(k): int(v) for k, v in obj.items() }
     if hasattr(obj, "classes_"):
         try:
@@ -91,7 +87,6 @@ def to_mapping(obj: Any, name: str) -> Dict[str, int]:
             return { str(c): int(i) for i, c in enumerate(classes) }
         except Exception:
             raise RuntimeError(f"Failed to convert LabelEncoder for {name} to mapping.")
-    # array-like
     if hasattr(obj, "__iter__") and not isinstance(obj, (str, bytes)):
         try:
             classes = list(obj)
@@ -100,11 +95,11 @@ def to_mapping(obj: Any, name: str) -> Dict[str, int]:
             pass
     raise RuntimeError(f"Unsupported artifact type for {name}; expected dict, LabelEncoder, or list of classes.")
 
-# ---------- globals to be populated at startup ----------
+# ---------- FastAPI app and globals ----------
 app = FastAPI(title="Crop Sage API")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # loosened for development; restrict in production
+    allow_origins=["*"],  # OK for development; restrict in production
     allow_methods=["*"],
     allow_headers=["*"],
     allow_credentials=True,
@@ -119,16 +114,11 @@ le_water = None
 soil_to_idx: Dict[str, int] = {}
 sown_to_idx: Dict[str, int] = {}
 
-# ---------- small utilities for SOWN parsing ----------
+# ---------- small SOWN parsing helpers ----------
 def parse_sown_token(x: Union[str, int]) -> str:
-    """
-    Normalize SOWN into a token string (prefer numbers 1..12 if possible).
-    Accepts integer month, month names or season names.
-    """
     if isinstance(x, int):
         return str(int(x))
     s = str(x).strip().lower()
-    # month name map
     month_map = {
         "jan":"1","january":"1","feb":"2","february":"2","mar":"3","march":"3","apr":"4","april":"4",
         "may":"5","jun":"6","june":"6","jul":"7","july":"7","aug":"8","august":"8","sep":"9","sept":"9","september":"9",
@@ -136,14 +126,12 @@ def parse_sown_token(x: Union[str, int]) -> str:
     }
     if s in month_map:
         return month_map[s]
-    # season words to representative month (fallback)
     if s in ("kharif","khareef"):
         return "7"
     if s in ("rabi",):
         return "11"
-    if s in ("zaid", "zaid"):
+    if s in ("zaid","zayad"):
         return "4"
-    # digits?
     if s.isdigit():
         try:
             v = int(s)
@@ -151,44 +139,38 @@ def parse_sown_token(x: Union[str, int]) -> str:
                 return str(v)
         except Exception:
             pass
-    # otherwise return raw string (will be matched against encoder mapping)
     return s
 
-# ---------- startup: load artifacts ----------
+# ---------- startup: load model + artifacts ----------
 @app.on_event("startup")
 def startup_load():
-    """
-    Load model and pickled artifacts from ART_DIR using candidate filenames.
-    Will raise RuntimeError if required artifacts are missing.
-    """
     global model, scaler_x, dur_scaler, wreq_scaler, le_name, le_water, soil_to_idx, sown_to_idx
 
-    # 1) load model (first existing candidate)
+    # load model (first candidate found)
     model_path = find_first_existing_path(MODEL_CANDIDATES)
     if model_path is None:
         raise RuntimeError(f"Model file not found. Tried: {MODEL_CANDIDATES} in {ART_DIR}")
-    # tf.keras.models.load_model can accept folder or file
     model = tf.keras.models.load_model(model_path)
 
-    # 2) load scalers and label encoders (pickles)
+    # load pickled scalers and label encoders (try candidate filenames)
     scaler_x = load_pickle_any(SCALER_X_CANDIDATES)
     dur_scaler = load_pickle_any(DUR_SCALER_CANDIDATES)
     wreq_scaler = load_pickle_any(WREQ_SCALER_CANDIDATES)
     le_name = load_pickle_any(LE_NAME_CANDIDATES)
     le_water = load_pickle_any(LE_WATER_CANDIDATES)
 
-    # 3) soil / sown artifacts -> convert to mapping token->index
+    # soil/sown artifacts -> convert to mapping token->index
     raw_soil = load_pickle_any(SOIL_TO_IDX_CANDIDATES)
     soil_to_idx = to_mapping(raw_soil, "soil_to_idx")
 
     raw_sown = load_pickle_any(SOWN_TO_IDX_CANDIDATES)
     sown_to_idx = to_mapping(raw_sown, "sown_to_idx")
 
-    # log loaded summary
+    # some helpful startup logging
     try:
         print("Startup: loaded model from:", model_path)
         print("Startup: scaler_x type:", type(scaler_x), "dur_scaler:", type(dur_scaler), "wreq_scaler:", type(wreq_scaler))
-        print("Startup: le_name classes:", safe_list(le_name)[:10], "count:", len(safe_list(le_name)))
+        print("Startup: le_name classes (sample):", safe_list(le_name)[:10], "count:", len(safe_list(le_name)))
         print("Startup: soil tokens (sample):", list(soil_to_idx.keys())[:10])
         print("Startup: sown tokens (sample):", list(sown_to_idx.keys())[:10])
     except Exception:
@@ -197,7 +179,7 @@ def startup_load():
 # ---------- request schema ----------
 class PredictRequest(BaseModel):
     SOIL: str
-    SOWN: Union[int, str]   # frontend sends month number (1..12) or a string token
+    SOWN: Union[int, str]
     SOIL_PH: float
     TEMP: float
     RELATIVE_HUMIDITY: float
@@ -214,40 +196,44 @@ class PredictRequest(BaseModel):
             if not v.strip():
                 raise ValueError("SOWN string cannot be empty")
         else:
-            raise ValueError("SOWN must be int 1..12 or a non-empty string")
+            raise ValueError("SOWN must be int 1..12 or non-empty string")
         return v
 
-# ---------- helper to ensure artifacts exist at call time ----------
 def ensure_loaded():
     if model is None or scaler_x is None or dur_scaler is None or wreq_scaler is None:
         raise HTTPException(status_code=503, detail="Model artifacts not loaded. Check server logs.")
 
-# ---------- token mapping helpers ----------
+# ---------- mapping helpers ----------
 def map_soil_token(soil_raw: str) -> int:
     s = str(soil_raw).strip()
-    # try exact matches (several casings)
     if s in soil_to_idx:
         return int(soil_to_idx[s])
     if s.lower() in soil_to_idx:
         return int(soil_to_idx[s.lower()])
     if s.title() in soil_to_idx:
         return int(soil_to_idx[s.title()])
-    # fallback unknown index used by training (common pattern: unknown index == len(mapping))
     return int(len(soil_to_idx))
 
 def map_sown_token(sown_raw: Union[int, str]) -> int:
     token = parse_sown_token(sown_raw)
-    # direct matches
     if token in sown_to_idx:
         return int(sown_to_idx[token])
     if token.lstrip("0") in sown_to_idx:
         return int(sown_to_idx[token.lstrip("0")])
     if token.lower() in sown_to_idx:
         return int(sown_to_idx[token.lower()])
-    # fallback unknown
     return int(len(sown_to_idx))
 
-# ---------- prediction logic ----------
+# ---------- helper to build single input vector ----------
+def build_single_input_vector(soil_idx: int, sown_idx: int, numeric_scaled: np.ndarray) -> np.ndarray:
+    # numeric_scaled: shape (1, M)
+    soil_float = float(soil_idx)
+    sown_float = float(sown_idx)
+    flattened = numeric_scaled.flatten().astype(np.float32)
+    vec = np.concatenate([[soil_float, sown_float], flattened], axis=None)
+    return vec.reshape(1, -1).astype(np.float32)
+
+# ---------- adaptive prediction function ----------
 def predict_from_payload(payload: PredictRequest) -> Dict[str, Any]:
     ensure_loaded()
 
@@ -255,23 +241,59 @@ def predict_from_payload(payload: PredictRequest) -> Dict[str, Any]:
     sown_idx = map_sown_token(payload.SOWN)
 
     numeric = np.array([[payload.SOIL_PH, payload.TEMP, payload.RELATIVE_HUMIDITY, payload.N, payload.P, payload.K]], dtype=np.float32)
-
     try:
         numeric_scaled = scaler_x.transform(numeric).astype(np.float32)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Scaler transform failed: {e}")
 
-    # Build inputs matching training input names
-    soil_in = np.array([soil_idx], dtype=np.int32)
-    sown_in = np.array([sown_idx], dtype=np.int32)
-    num_in = numeric_scaled
+    # Inspect model inputs
+    try:
+        model_inputs = getattr(model, "inputs", None)
+        model_input_names = [inp.name.split(":")[0] for inp in model_inputs] if model_inputs is not None else []
+        num_model_inputs = len(model_inputs) if model_inputs is not None else 0
+    except Exception:
+        model_input_names = []
+        num_model_inputs = 0
 
     try:
-        preds = model.predict({"soil_in": soil_in, "sown_in": sown_in, "num_in": num_in}, verbose=0)
+        if num_model_inputs >= 3:
+            # multi-input model: try to match names, else fallback to expected keys
+            lowered = [n.lower() for n in model_input_names]
+            key_map = {}
+            for n in model_input_names:
+                nl = n.lower()
+                if "soil" in nl:
+                    key_map["soil_in"] = n
+                elif "sown" in nl or "season" in nl:
+                    key_map["sown_in"] = n
+                elif "num" in nl or "input" in nl or "numeric" in nl:
+                    key_map["num_in"] = n
+
+            # Assemble dict for prediction, prefer detected names
+            pred_input = {
+                key_map.get("soil_in", model_input_names[0] if model_input_names else "soil_in"): np.array([soil_idx], dtype=np.int32),
+                key_map.get("sown_in", model_input_names[1] if len(model_input_names) > 1 else "sown_in"): np.array([sown_idx], dtype=np.int32),
+                key_map.get("num_in", model_input_names[2] if len(model_input_names) > 2 else "num_in"): numeric_scaled
+            }
+            preds = model.predict(pred_input, verbose=0)
+        else:
+            # single-input model: build single vector and call predict accordingly
+            single_vec = build_single_input_vector(soil_idx, sown_idx, numeric_scaled)
+            if num_model_inputs == 1 and len(model_input_names) == 1:
+                single_name = model_input_names[0]
+                # try dict with name first, fallback to array
+                try:
+                    preds = model.predict({single_name: single_vec}, verbose=0)
+                except Exception:
+                    preds = model.predict(single_vec, verbose=0)
+            else:
+                preds = model.predict(single_vec, verbose=0)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Model prediction failed: {e}")
 
-    # Expect model outputs [name_probs, water_probs, dur_scaled, wreq_scaled]
+    # parse outputs: [name_probs, water_probs, dur_scaled, wreq_scaled]
     try:
         name_probs = np.array(preds[0])[0]
         water_probs = np.array(preds[1])[0]
@@ -285,7 +307,6 @@ def predict_from_payload(payload: PredictRequest) -> Dict[str, Any]:
     name_conf = float(name_probs[name_idx])
     water_conf = float(water_probs[water_idx])
 
-    # try to inverse-transform class labels
     try:
         crop_label = str(le_name.inverse_transform([name_idx])[0])
     except Exception:
@@ -296,7 +317,6 @@ def predict_from_payload(payload: PredictRequest) -> Dict[str, Any]:
     except Exception:
         water_label = str(safe_list(le_water)[water_idx] if water_idx < len(safe_list(le_water)) else water_idx)
 
-    # inverse scale regressions
     try:
         crop_duration = float(dur_scaler.inverse_transform(np.array([[dur_scaled]]))[0, 0])
     except Exception as e:
@@ -314,7 +334,7 @@ def predict_from_payload(payload: PredictRequest) -> Dict[str, Any]:
         "water_required": water_required
     }
 
-# ---------- API endpoints ----------
+# ---------- endpoints ----------
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -351,8 +371,7 @@ def api_debug_encoders():
         "le_water_classes": safe_list(le_water)
     }
 
-# ---------- run guard (optional for local runs) ----------
+# optional local run
 if __name__ == "__main__":
-    # quick local run for dev (uvicorn recommended in production)
     import uvicorn
     uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=False)
